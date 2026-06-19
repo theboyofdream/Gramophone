@@ -39,6 +39,7 @@ import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.ui.ItemHeightHelper
 import org.akanework.gramophone.logic.ui.MyRecyclerView
 import org.akanework.gramophone.logic.ui.QuickLinearSmoothScroller
+import org.akanework.gramophone.logic.utils.FilterRangeDialog
 import org.akanework.gramophone.logic.utils.exoplayer.EndedWorkaroundPlayer.Companion.queueWithTitle
 import org.akanework.gramophone.ui.fragments.AdapterFragment
 import org.akanework.gramophone.ui.getAdapterType
@@ -97,7 +98,8 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                 Pair(R.id.add_date, Sorter.Type.ByAddDateDescending),
                 Pair(R.id.release_date, Sorter.Type.ByReleaseDateDescending),
                 Pair(R.id.mod_date, Sorter.Type.ByModifiedDateDescending),
-                Pair(R.id.file_path, Sorter.Type.ByFilePathAscending)
+                Pair(R.id.file_path, Sorter.Type.ByFilePathAscending),
+                Pair(R.id.duration, Sorter.Type.ByDurationDescending)
             )
             val layoutMap = mapOf(
                 Pair(R.id.list, BaseAdapter.LayoutType.LIST),
@@ -175,13 +177,39 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
         }
         holder.sortOrderButton.setOnClickListener {
             val currentType = adapter.sortType.value
-            val inverseType = Sorter.Type.inverse(currentType) ?: return@setOnClickListener
-            adapter.sort(inverseType)
-            prefs.edit {
-                putString(
-                    "S" + getAdapterType(adapter).toString(),
-                    inverseType.toString()
+            val isSizeSort = currentType == Sorter.Type.BySizeAscending
+                    || currentType == Sorter.Type.BySizeDescending
+            val isDurationSort = currentType == Sorter.Type.ByDurationAscending
+                    || currentType == Sorter.Type.ByDurationDescending
+            if (isSizeSort && adapter is BaseAdapter<*>) {
+                val baseAdapter = adapter as BaseAdapter<*>
+                val maxSize = baseAdapter.getMaxSize()
+                val current = baseAdapter.filterRange.value
+                FilterRangeDialog.showSizeFilter(
+                    context, 0f, maxSize,
+                    current?.min ?: 0f, current?.max ?: maxSize,
+                    onApply = { min, max -> baseAdapter.setFilterRange(min, max) },
+                    onReset = { baseAdapter.clearFilter() }
                 )
+            } else if (isDurationSort && adapter is BaseAdapter<*>) {
+                val baseAdapter = adapter as BaseAdapter<*>
+                val maxDuration = baseAdapter.getMaxDuration()
+                val current = baseAdapter.filterRange.value
+                FilterRangeDialog.showDurationFilter(
+                    context, 0f, maxDuration,
+                    current?.min ?: 0f, current?.max ?: maxDuration,
+                    onApply = { min, max -> baseAdapter.setFilterRange(min, max) },
+                    onReset = { baseAdapter.clearFilter() }
+                )
+            } else {
+                val inverseType = Sorter.Type.inverse(currentType) ?: return@setOnClickListener
+                adapter.sort(inverseType)
+                prefs.edit {
+                    putString(
+                        "S" + getAdapterType(adapter).toString(),
+                        inverseType.toString()
+                    )
+                }
             }
             updateSortOrderButton(holder)
         }
@@ -335,12 +363,24 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                 && Sorter.Type.inverse(currentType) != null
         holder.sortOrderButton.visibility = if (canToggle) View.VISIBLE else View.GONE
         if (canToggle) {
-            holder.sortOrderButton.icon = ResourcesCompat.getDrawable(
-                context.resources,
-                if (isAscending(currentType)) R.drawable.baseline_arrow_upward_24
-                else R.drawable.baseline_arrow_downward_24,
-                context.theme
-            )
+            val isSizeOrDuration = currentType == Sorter.Type.BySizeAscending
+                    || currentType == Sorter.Type.BySizeDescending
+                    || currentType == Sorter.Type.ByDurationAscending
+                    || currentType == Sorter.Type.ByDurationDescending
+            if (isSizeOrDuration) {
+                holder.sortOrderButton.icon = ResourcesCompat.getDrawable(
+                    context.resources, R.drawable.ic_filter, context.theme
+                )
+                holder.sortOrderButton.tooltipText = context.getString(R.string.filter)
+            } else {
+                holder.sortOrderButton.icon = ResourcesCompat.getDrawable(
+                    context.resources,
+                    if (isAscending(currentType)) R.drawable.baseline_arrow_upward_24
+                    else R.drawable.baseline_arrow_downward_24,
+                    context.theme
+                )
+                holder.sortOrderButton.tooltipText = context.getString(R.string.sort_order)
+            }
         }
     }
 

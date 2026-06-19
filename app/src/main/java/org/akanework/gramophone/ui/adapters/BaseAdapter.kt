@@ -133,6 +133,9 @@ abstract class BaseAdapter<T : Any>(
         }
     override lateinit var sortType: MutableStateFlow<Sorter.Type>
 
+    data class FilterRange(val min: Float, val max: Float)
+    val filterRange = MutableStateFlow<FilterRange?>(null)
+
     @OptIn(ExperimentalCoroutinesApi::class)
     private val flow by lazy {
         liveDataAgent.flatMapLatest { it }
@@ -155,7 +158,23 @@ abstract class BaseAdapter<T : Any>(
                         }
                     }
                 }.toList()
-            }.sharePauseableIn(
+            }
+            .combine(filterRange) { (original, sorted), fr ->
+                if (fr == null) return@combine original to sorted
+                val st = sortType.value
+                val isSizeSort = st == Sorter.Type.BySizeAscending || st == Sorter.Type.BySizeDescending
+                val isDurationSort = st == Sorter.Type.ByDurationAscending || st == Sorter.Type.ByDurationDescending
+                if (!isSizeSort && !isDurationSort) return@combine original to sorted
+                original to sorted.filter { item ->
+                    val value = when {
+                        isSizeSort -> sorter.sortingHelper.getSize(item).toFloat()
+                        isDurationSort -> sorter.sortingHelper.getDuration(item).toFloat()
+                        else -> true
+                    }
+                    value >= fr.min && value <= fr.max
+                }
+            }
+            .sharePauseableIn(
                 CoroutineScope(Dispatchers.Default),
                 SharingStarted.WhileSubscribed(5000),
                 replay = 1
@@ -318,6 +337,24 @@ abstract class BaseAdapter<T : Any>(
 
     override fun sort(type: Sorter.Type) {
         sortType.value = type
+    }
+
+    fun setFilterRange(min: Float, max: Float) {
+        filterRange.value = FilterRange(min, max)
+    }
+
+    fun clearFilter() {
+        filterRange.value = null
+    }
+
+    fun getMaxSize(): Float {
+        val items = list?.second ?: return 0f
+        return items.maxOfOrNull { sorter.sortingHelper.getSize(it).toFloat() } ?: 0f
+    }
+
+    fun getMaxDuration(): Float {
+        val items = list?.second ?: return 0f
+        return items.maxOfOrNull { sorter.sortingHelper.getDuration(it).toFloat() } ?: 0f
     }
 
     protected open fun onListUpdated() {}
