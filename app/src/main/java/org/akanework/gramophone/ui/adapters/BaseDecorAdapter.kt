@@ -101,6 +101,12 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                 Pair(R.id.file_path, Sorter.Type.ByFilePathAscending),
                 Pair(R.id.duration, Sorter.Type.ByDurationDescending)
             )
+            val sortTypeToMenuId = buildMap {
+                buttonMap.forEach { (menuId, sortType) ->
+                    put(sortType, menuId)
+                    Sorter.Type.inverse(sortType)?.let { put(it, menuId) }
+                }
+            }
             val layoutMap = mapOf(
                 Pair(R.id.list, BaseAdapter.LayoutType.LIST),
                 Pair(R.id.compact_list, BaseAdapter.LayoutType.COMPACT_LIST),
@@ -115,15 +121,8 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
             }
             popupMenu.menu.findItem(R.id.display).isVisible = adapter.canChangeLayout
             if (adapter.sortType.value != Sorter.Type.None) {
-                when (adapter.sortType.value) {
-                    in buttonMap.values -> {
-                        popupMenu.menu.findItem(
-                            buttonMap.entries
-                                .first { it.value == adapter.sortType.value }.key
-                        ).isChecked = true
-                    }
-
-                    else -> throw IllegalStateException("Invalid sortType ${adapter.sortType.value.name}")
+                sortTypeToMenuId[adapter.sortType.value]?.let { menuId ->
+                    popupMenu.menu.findItem(menuId).isChecked = true
                 }
             }
             if (adapter.canChangeLayout) {
@@ -144,7 +143,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                         if (!menuItem.isChecked) {
                             adapter.sort(buttonMap[menuItem.itemId]!!)
                             menuItem.isChecked = true
-                            prefs.edit {
+                            prefs.edit(commit = true) {
                                 putString(
                                     "S" + getAdapterType(adapter).toString(),
                                     buttonMap[menuItem.itemId].toString()
@@ -204,7 +203,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
             } else {
                 val inverseType = Sorter.Type.inverse(currentType) ?: return@setOnClickListener
                 adapter.sort(inverseType)
-                prefs.edit {
+                prefs.edit(commit = true) {
                     putString(
                         "S" + getAdapterType(adapter).toString(),
                         inverseType.toString()

@@ -220,6 +220,14 @@ abstract class BaseAdapter<T : Any>(
             else
                 initialSortType
         )
+        val adapterType = getAdapterType(this)
+        val hasFilter = prefs.getBooleanStrict("FR_SET$adapterType", false)
+        if (hasFilter) {
+            filterRange.value = FilterRange(
+                prefs.getFloat("FR_MIN$adapterType", 0f),
+                prefs.getFloat("FR_MAX$adapterType", 0f)
+            )
+        }
         val mayBlock = isSubFragment != null
         var blockMutex = if (mayBlock) Mutex() else null
         var onListLoadedCompleter = if (mayBlock)
@@ -341,10 +349,20 @@ abstract class BaseAdapter<T : Any>(
 
     fun setFilterRange(min: Float, max: Float) {
         filterRange.value = FilterRange(min, max)
+        prefs.edit(commit = true) {
+            putFloat("FR_MIN" + getAdapterType(this@BaseAdapter).toString(), min)
+            putFloat("FR_MAX" + getAdapterType(this@BaseAdapter).toString(), max)
+            putBoolean("FR_SET" + getAdapterType(this@BaseAdapter).toString(), true)
+        }
     }
 
     fun clearFilter() {
         filterRange.value = null
+        prefs.edit(commit = true) {
+            remove("FR_MIN" + getAdapterType(this@BaseAdapter).toString())
+            remove("FR_MAX" + getAdapterType(this@BaseAdapter).toString())
+            remove("FR_SET" + getAdapterType(this@BaseAdapter).toString())
+        }
     }
 
     fun getMaxSize(): Float {
