@@ -99,6 +99,25 @@
             app:tooltipText="@string/sort" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/sort_order"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/rp_buttons"
+            android:contentDescription="@string/sort_order"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:visibility="gone"
+            app:icon="@drawable/ic_sort_order"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconSize="24dp"
+            app:iconTint="?attr/colorPrimary"
+            app:tooltipText="@string/sort_order"
+            tools:visibility="visible" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/jumpUp"
             android:layout_width="48dp"
             android:layout_height="48dp"

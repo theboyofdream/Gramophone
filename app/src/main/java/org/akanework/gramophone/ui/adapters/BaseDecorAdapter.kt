@@ -26,6 +26,7 @@ import android.widget.TextView
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.content.edit
 import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.content.res.ResourcesCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player.REPEAT_MODE_OFF
 import androidx.preference.PreferenceManager
@@ -79,6 +80,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
         }
         holder.sortButton.visibility =
             if (adapter.sortType.value != Sorter.Type.None || adapter.canChangeLayout) View.VISIBLE else View.GONE
+        updateSortOrderButton(holder)
         holder.sortButton.setOnClickListener { view ->
             val popupMenu = PopupMenu(context, view)
             popupMenu.inflate(R.menu.sort_menu)
@@ -146,6 +148,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                                     buttonMap[menuItem.itemId].toString()
                                 )
                             }
+                            updateSortOrderButton(holder)
                         }
                         true
                     }
@@ -169,6 +172,18 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
             }
             onSortButtonPressed(popupMenu)
             popupMenu.show()
+        }
+        holder.sortOrderButton.setOnClickListener {
+            val currentType = adapter.sortType.value
+            val inverseType = Sorter.Type.inverse(currentType) ?: return@setOnClickListener
+            adapter.sort(inverseType)
+            prefs.edit {
+                putString(
+                    "S" + getAdapterType(adapter).toString(),
+                    inverseType.toString()
+                )
+            }
+            updateSortOrderButton(holder)
         }
         holder.playAll.setOnClickListener {
             if (adapter is SongAdapter) {
@@ -263,6 +278,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
 
     override fun onViewRecycled(holder: ViewHolder) {
         holder.sortButton.setOnClickListener(null)
+        holder.sortOrderButton.setOnClickListener(null)
         holder.playAll.setOnClickListener(null)
         holder.shuffleAll.setOnClickListener(null)
         holder.jumpUp.setOnClickListener(null)
@@ -309,6 +325,25 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
     protected open fun onSortButtonPressed(popupMenu: PopupMenu) {}
     protected open fun onExtraMenuButtonPressed(menuItem: MenuItem): Boolean = false
 
+    private fun isAscending(type: Sorter.Type): Boolean {
+        return type.name.endsWith("Ascending")
+    }
+
+    private fun updateSortOrderButton(holder: ViewHolder) {
+        val currentType = adapter.sortType.value
+        val canToggle = currentType != Sorter.Type.None
+                && Sorter.Type.inverse(currentType) != null
+        holder.sortOrderButton.visibility = if (canToggle) View.VISIBLE else View.GONE
+        if (canToggle) {
+            holder.sortOrderButton.icon = ResourcesCompat.getDrawable(
+                context.resources,
+                if (isAscending(currentType)) R.drawable.baseline_arrow_upward_24
+                else R.drawable.baseline_arrow_downward_24,
+                context.theme
+            )
+        }
+    }
+
     override fun getItemCount(): Int = 1
     override fun getItemViewType(position: Int): Int = R.layout.general_decor
 
@@ -316,6 +351,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
         view: View,
     ) : RecyclerView.ViewHolder(view) {
         val sortButton: MaterialButton = view.findViewById(R.id.sort)
+        val sortOrderButton: MaterialButton = view.findViewById(R.id.sort_order)
         val createPlaylist: MaterialButton = view.findViewById(R.id.create_playlist)
         val playAll: MaterialButton = view.findViewById(R.id.play_all)
         val shuffleAll: MaterialButton = view.findViewById(R.id.shuffle_all)

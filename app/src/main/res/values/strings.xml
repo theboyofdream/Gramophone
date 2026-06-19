@@ -366,6 +366,7 @@
     <string name="shuffle_all">Shuffle all</string>
     <!-- Tooltip for sort option button in song list -->
     <string name="sort">Sort</string>
+    <string name="sort_order">Sort order</string>
     <!-- Tooltip for scroll button in artist page, which has both albums and songs -->
     <string name="scroll_to_albums">Scroll to albums</string>
     <!-- Tooltip for scroll button in artist page, which has both albums and songs -->
