@@ -407,6 +407,7 @@ class SongAdapter(
             Sorter.Type.ByAlbumArtistYearDescending, Sorter.Type.ByAlbumArtistYearAscending,
             Sorter.Type.ByAlbumYearDescending, Sorter.Type.ByAlbumYearAscending,
             Sorter.Type.BySizeDescending, Sorter.Type.BySizeAscending,
+            Sorter.Type.ByDurationDescending, Sorter.Type.ByDurationAscending,
             Sorter.Type.ByAddDateDescending, Sorter.Type.ByAddDateAscending,
             Sorter.Type.ByReleaseDateDescending, Sorter.Type.ByReleaseDateAscending,
             Sorter.Type.ByModifiedDateDescending, Sorter.Type.ByModifiedDateAscending,
@@ -476,6 +477,10 @@ class SongAdapter(
 
         override fun getSize(item: MediaItem): Int {
             return getFile(item).length().toInt()
+        }
+
+        override fun getDuration(item: MediaItem): Long {
+            return item.mediaMetadata.duration ?: 0
         }
 
         override fun getModifiedDate(item: MediaItem): Long {

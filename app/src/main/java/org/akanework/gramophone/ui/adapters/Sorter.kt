@@ -49,7 +49,11 @@ class Sorter<T>(
         open fun getAddDate(item: T): Long = throw UnsupportedOperationException()
         open fun getReleaseDate(item: T): Long = throw UnsupportedOperationException()
         open fun getModifiedDate(item: T): Long = throw UnsupportedOperationException()
+        open fun getDuration(item: T): Long = throw UnsupportedOperationException()
         open fun getDiscAndTrack(item: T): Int = throw UnsupportedOperationException()
+        fun canGetDuration(): Boolean = typesSupported.contains(Type.ByDurationAscending)
+                || typesSupported.contains(Type.ByDurationDescending)
+
         fun canGetTitle(): Boolean = typesSupported.contains(Type.ByTitleAscending)
                 || typesSupported.contains(Type.ByTitleDescending)
 
@@ -104,6 +108,7 @@ class Sorter<T>(
         ByReleaseDateDescending, ByReleaseDateAscending,
         ByModifiedDateDescending, ByModifiedDateAscending,
         ByFilePathDescending, ByFilePathAscending,
+        ByDurationDescending, ByDurationAscending,
         ByDiscAndTrack,
         None;
 
@@ -136,6 +141,8 @@ class Sorter<T>(
                 ByModifiedDateAscending -> ByModifiedDateDescending
                 ByFilePathDescending -> ByFilePathAscending
                 ByFilePathAscending -> ByFilePathDescending
+                ByDurationDescending -> ByDurationAscending
+                ByDurationAscending -> ByDurationDescending
                 ByDiscAndTrack -> null
                 None -> null
             }
@@ -339,6 +346,18 @@ class Sorter<T>(
                 }, null)
             }
 
+            Type.ByDurationDescending -> {
+                SupportComparator.createInversionComparator(
+                    compareBy { sortingHelper.getDuration(it) }, true
+                )
+            }
+
+            Type.ByDurationAscending -> {
+                SupportComparator.createInversionComparator(
+                    compareBy { sortingHelper.getDuration(it) }, false
+                )
+            }
+
             Type.ByDiscAndTrack -> {
                 compareBy { sortingHelper.getDiscAndTrack(it) }
             }
@@ -410,6 +429,10 @@ class Sorter<T>(
 
             Type.ByModifiedDateDescending, Type.ByModifiedDateAscending -> {
                 CalculationUtils.convertUnixTimestampToMonthDay(sortingHelper.getAddDate(item))
+            }
+
+            Type.ByDurationDescending, Type.ByDurationAscending -> {
+                CalculationUtils.convertDurationToTimeStamp(sortingHelper.getDuration(item))
             }
 
             Type.NaturalOrder -> {
