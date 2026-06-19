@@ -480,7 +480,7 @@ class SongAdapter(
         }
 
         override fun getDuration(item: MediaItem): Long {
-            return item.mediaMetadata.duration ?: 0
+            return item.mediaMetadata.durationMs ?: 0
         }
 
         override fun getModifiedDate(item: MediaItem): Long {

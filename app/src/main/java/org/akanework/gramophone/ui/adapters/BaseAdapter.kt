@@ -29,6 +29,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
+import androidx.core.content.edit
 import androidx.core.view.doOnLayout
 import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.Fragment
@@ -61,6 +62,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import me.zhanghai.android.fastscroll.PopupTextProvider
 import org.akanework.gramophone.R
+import org.akanework.gramophone.logic.getBooleanStrict
 import org.akanework.gramophone.logic.getStringStrict
 import org.akanework.gramophone.logic.ui.DefaultItemHeightHelper
 import org.akanework.gramophone.logic.ui.ItemHeightHelper
@@ -166,10 +168,10 @@ abstract class BaseAdapter<T : Any>(
                 val isDurationSort = st == Sorter.Type.ByDurationAscending || st == Sorter.Type.ByDurationDescending
                 if (!isSizeSort && !isDurationSort) return@combine original to sorted
                 original to sorted.filter { item ->
-                    val value = when {
+                    val value: Float = when {
                         isSizeSort -> sorter.sortingHelper.getSize(item).toFloat()
                         isDurationSort -> sorter.sortingHelper.getDuration(item).toFloat()
-                        else -> true
+                        else -> 0f
                     }
                     value >= fr.min && value <= fr.max
                 }
