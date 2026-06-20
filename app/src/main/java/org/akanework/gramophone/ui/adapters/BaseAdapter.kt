@@ -351,7 +351,7 @@ abstract class BaseAdapter<T : Any>(
 
     fun setFilterRange(min: Float, max: Float) {
         filterRange.value = FilterRange(min, max)
-        prefs.edit(commit = true) {
+        prefs.edit {
             putFloat("FR_MIN" + getAdapterType(this@BaseAdapter).toString(), min)
             putFloat("FR_MAX" + getAdapterType(this@BaseAdapter).toString(), max)
             putBoolean("FR_SET" + getAdapterType(this@BaseAdapter).toString(), true)
@@ -360,7 +360,7 @@ abstract class BaseAdapter<T : Any>(
 
     fun clearFilter() {
         filterRange.value = null
-        prefs.edit(commit = true) {
+        prefs.edit {
             remove("FR_MIN" + getAdapterType(this@BaseAdapter).toString())
             remove("FR_MAX" + getAdapterType(this@BaseAdapter).toString())
             remove("FR_SET" + getAdapterType(this@BaseAdapter).toString())

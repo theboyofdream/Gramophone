@@ -143,7 +143,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                         if (!menuItem.isChecked) {
                             adapter.sort(buttonMap[menuItem.itemId]!!)
                             menuItem.isChecked = true
-                            prefs.edit(commit = true) {
+                            prefs.edit {
                                 putString(
                                     "S" + getAdapterType(adapter).toString(),
                                     buttonMap[menuItem.itemId].toString()
@@ -203,7 +203,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
             } else {
                 val inverseType = Sorter.Type.inverse(currentType) ?: return@setOnClickListener
                 adapter.sort(inverseType)
-                prefs.edit(commit = true) {
+                prefs.edit {
                     putString(
                         "S" + getAdapterType(adapter).toString(),
                         inverseType.toString()
