@@ -184,8 +184,14 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                                 FilterRangeDialog.showSizeFilter(
                                     context, 0f, maxSize,
                                     current?.min ?: 0f, current?.max ?: maxSize,
-                                    onApply = { min, max -> baseAdapter.setFilterRange(min, max) },
-                                    onReset = { baseAdapter.clearFilter() }
+                                    onApply = { min, max ->
+                                        baseAdapter.setFilterRange(min, max)
+                                        updateSortOrderButton(holder)
+                                    },
+                                    onReset = {
+                                        baseAdapter.clearFilter()
+                                        updateSortOrderButton(holder)
+                                    }
                                 )
                             } else if (currentType == Sorter.Type.ByDurationAscending || currentType == Sorter.Type.ByDurationDescending) {
                                 val maxDuration = baseAdapter.getMaxDuration()
@@ -193,8 +199,14 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                                 FilterRangeDialog.showDurationFilter(
                                     context, 0f, maxDuration,
                                     current?.min ?: 0f, current?.max ?: maxDuration,
-                                    onApply = { min, max -> baseAdapter.setFilterRange(min, max) },
-                                    onReset = { baseAdapter.clearFilter() }
+                                    onApply = { min, max ->
+                                        baseAdapter.setFilterRange(min, max)
+                                        updateSortOrderButton(holder)
+                                    },
+                                    onReset = {
+                                        baseAdapter.clearFilter()
+                                        updateSortOrderButton(holder)
+                                    }
                                 )
                             }
                         }
@@ -377,6 +389,12 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
             )
             holder.sortOrderButton.tooltipText = context.getString(R.string.sort_order)
         }
+        val isFilterable = currentType == Sorter.Type.BySizeAscending
+                || currentType == Sorter.Type.BySizeDescending
+                || currentType == Sorter.Type.ByDurationAscending
+                || currentType == Sorter.Type.ByDurationDescending
+        val hasFilter = isFilterable && (adapter as? BaseAdapter<*>)?.filterRange?.value != null
+        holder.filterBadge.visibility = if (hasFilter) View.VISIBLE else View.GONE
     }
 
     override fun getItemCount(): Int = 1
@@ -387,6 +405,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
     ) : RecyclerView.ViewHolder(view) {
         val sortButton: MaterialButton = view.findViewById(R.id.sort)
         val sortOrderButton: MaterialButton = view.findViewById(R.id.sort_order)
+        val filterBadge: View = view.findViewById(R.id.filter_badge)
         val createPlaylist: MaterialButton = view.findViewById(R.id.create_playlist)
         val playAll: MaterialButton = view.findViewById(R.id.play_all)
         val shuffleAll: MaterialButton = view.findViewById(R.id.shuffle_all)
