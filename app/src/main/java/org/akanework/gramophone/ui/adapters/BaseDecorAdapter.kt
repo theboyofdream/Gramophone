@@ -120,6 +120,12 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                 popupMenu.menu.findItem(it.key).isVisible = adapter.canChangeLayout
             }
             popupMenu.menu.findItem(R.id.display).isVisible = adapter.canChangeLayout
+            val currentSortType = adapter.sortType.value
+            val isFilterable = currentSortType == Sorter.Type.BySizeAscending
+                    || currentSortType == Sorter.Type.BySizeDescending
+                    || currentSortType == Sorter.Type.ByDurationAscending
+                    || currentSortType == Sorter.Type.ByDurationDescending
+            popupMenu.menu.findItem(R.id.filter).isVisible = isFilterable
             if (adapter.sortType.value != Sorter.Type.None) {
                 sortTypeToMenuId[adapter.sortType.value]?.let { menuId ->
                     popupMenu.menu.findItem(menuId).isChecked = true
@@ -168,6 +174,33 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                         true
                     }
 
+                    R.id.filter -> {
+                        if (adapter is BaseAdapter<*>) {
+                            val baseAdapter = adapter as BaseAdapter<*>
+                            val currentType = adapter.sortType.value
+                            if (currentType == Sorter.Type.BySizeAscending || currentType == Sorter.Type.BySizeDescending) {
+                                val maxSize = baseAdapter.getMaxSize()
+                                val current = baseAdapter.filterRange.value
+                                FilterRangeDialog.showSizeFilter(
+                                    context, 0f, maxSize,
+                                    current?.min ?: 0f, current?.max ?: maxSize,
+                                    onApply = { min, max -> baseAdapter.setFilterRange(min, max) },
+                                    onReset = { baseAdapter.clearFilter() }
+                                )
+                            } else if (currentType == Sorter.Type.ByDurationAscending || currentType == Sorter.Type.ByDurationDescending) {
+                                val maxDuration = baseAdapter.getMaxDuration()
+                                val current = baseAdapter.filterRange.value
+                                FilterRangeDialog.showDurationFilter(
+                                    context, 0f, maxDuration,
+                                    current?.min ?: 0f, current?.max ?: maxDuration,
+                                    onApply = { min, max -> baseAdapter.setFilterRange(min, max) },
+                                    onReset = { baseAdapter.clearFilter() }
+                                )
+                            }
+                        }
+                        true
+                    }
+
                     else -> onExtraMenuButtonPressed(menuItem)
                 }
             }
@@ -176,39 +209,13 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
         }
         holder.sortOrderButton.setOnClickListener {
             val currentType = adapter.sortType.value
-            val isSizeSort = currentType == Sorter.Type.BySizeAscending
-                    || currentType == Sorter.Type.BySizeDescending
-            val isDurationSort = currentType == Sorter.Type.ByDurationAscending
-                    || currentType == Sorter.Type.ByDurationDescending
-            if (isSizeSort && adapter is BaseAdapter<*>) {
-                val baseAdapter = adapter as BaseAdapter<*>
-                val maxSize = baseAdapter.getMaxSize()
-                val current = baseAdapter.filterRange.value
-                FilterRangeDialog.showSizeFilter(
-                    context, 0f, maxSize,
-                    current?.min ?: 0f, current?.max ?: maxSize,
-                    onApply = { min, max -> baseAdapter.setFilterRange(min, max) },
-                    onReset = { baseAdapter.clearFilter() }
+            val inverseType = Sorter.Type.inverse(currentType) ?: return@setOnClickListener
+            adapter.sort(inverseType)
+            prefs.edit {
+                putString(
+                    "S" + getAdapterType(adapter).toString(),
+                    inverseType.toString()
                 )
-            } else if (isDurationSort && adapter is BaseAdapter<*>) {
-                val baseAdapter = adapter as BaseAdapter<*>
-                val maxDuration = baseAdapter.getMaxDuration()
-                val current = baseAdapter.filterRange.value
-                FilterRangeDialog.showDurationFilter(
-                    context, 0f, maxDuration,
-                    current?.min ?: 0f, current?.max ?: maxDuration,
-                    onApply = { min, max -> baseAdapter.setFilterRange(min, max) },
-                    onReset = { baseAdapter.clearFilter() }
-                )
-            } else {
-                val inverseType = Sorter.Type.inverse(currentType) ?: return@setOnClickListener
-                adapter.sort(inverseType)
-                prefs.edit {
-                    putString(
-                        "S" + getAdapterType(adapter).toString(),
-                        inverseType.toString()
-                    )
-                }
             }
             updateSortOrderButton(holder)
         }
@@ -362,24 +369,13 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                 && Sorter.Type.inverse(currentType) != null
         holder.sortOrderButton.visibility = if (canToggle) View.VISIBLE else View.GONE
         if (canToggle) {
-            val isSizeOrDuration = currentType == Sorter.Type.BySizeAscending
-                    || currentType == Sorter.Type.BySizeDescending
-                    || currentType == Sorter.Type.ByDurationAscending
-                    || currentType == Sorter.Type.ByDurationDescending
-            if (isSizeOrDuration) {
-                holder.sortOrderButton.icon = ResourcesCompat.getDrawable(
-                    context.resources, R.drawable.ic_filter, context.theme
-                )
-                holder.sortOrderButton.tooltipText = context.getString(R.string.filter)
-            } else {
-                holder.sortOrderButton.icon = ResourcesCompat.getDrawable(
-                    context.resources,
-                    if (isAscending(currentType)) R.drawable.baseline_arrow_upward_24
-                    else R.drawable.baseline_arrow_downward_24,
-                    context.theme
-                )
-                holder.sortOrderButton.tooltipText = context.getString(R.string.sort_order)
-            }
+            holder.sortOrderButton.icon = ResourcesCompat.getDrawable(
+                context.resources,
+                if (isAscending(currentType)) R.drawable.baseline_arrow_upward_24
+                else R.drawable.baseline_arrow_downward_24,
+                context.theme
+            )
+            holder.sortOrderButton.tooltipText = context.getString(R.string.sort_order)
         }
     }
 
