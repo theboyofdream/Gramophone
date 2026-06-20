@@ -62,6 +62,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import me.zhanghai.android.fastscroll.PopupTextProvider
 import org.akanework.gramophone.R
+import org.akanework.gramophone.logic.allowDiskAccessInStrictMode
 import org.akanework.gramophone.logic.getBooleanStrict
 import org.akanework.gramophone.logic.getStringStrict
 import org.akanework.gramophone.logic.ui.DefaultItemHeightHelper
@@ -188,47 +189,49 @@ abstract class BaseAdapter<T : Any>(
     // Subclasses must call this. This isn't an init block to avoid leaking this to getAdapterType()
     // TODO: maybe refactor getAdapterType() at some point instead?
     protected fun lateInit() {
-        val prefLayoutType: LayoutType =
-            try {
-                LayoutType.valueOf(
-                    prefs.getStringStrict(
-                        "L" + getAdapterType(this).toString(),
-                        LayoutType.NONE.toString()
-                    )!!
-                )
-            } catch (_: IllegalArgumentException) {
-                LayoutType.NONE
-            }
-        layoutType =
-            if (prefLayoutType != LayoutType.NONE && prefLayoutType != defaultLayoutType)
-                prefLayoutType
-            else
-                defaultLayoutType
-        val prefSortType: Sorter.Type =
-            if (canSort) try {
-                Sorter.Type.valueOf(
-                    prefs.getStringStrict(
-                        "S" + getAdapterType(this).toString(),
-                        Sorter.Type.None.toString()
-                    )!!
-                )
-            } catch (_: IllegalArgumentException) {
-                Sorter.Type.None
-            }
-            else Sorter.Type.None
-        sortType = MutableStateFlow(
-            if (prefSortType != Sorter.Type.None && sortTypes.contains(prefSortType))
-                prefSortType
-            else
-                initialSortType
-        )
-        val adapterType = getAdapterType(this)
-        val hasFilter = prefs.getBooleanStrict("FR_SET$adapterType", false)
-        if (hasFilter) {
-            filterRange.value = FilterRange(
-                prefs.getFloat("FR_MIN$adapterType", 0f),
-                prefs.getFloat("FR_MAX$adapterType", 0f)
+        allowDiskAccessInStrictMode {
+            val prefLayoutType: LayoutType =
+                try {
+                    LayoutType.valueOf(
+                        prefs.getStringStrict(
+                            "L" + getAdapterType(this@BaseAdapter).toString(),
+                            LayoutType.NONE.toString()
+                        )!!
+                    )
+                } catch (_: IllegalArgumentException) {
+                    LayoutType.NONE
+                }
+            layoutType =
+                if (prefLayoutType != LayoutType.NONE && prefLayoutType != defaultLayoutType)
+                    prefLayoutType
+                else
+                    defaultLayoutType
+            val prefSortType: Sorter.Type =
+                if (canSort) try {
+                    Sorter.Type.valueOf(
+                        prefs.getStringStrict(
+                            "S" + getAdapterType(this@BaseAdapter).toString(),
+                            Sorter.Type.None.toString()
+                        )!!
+                    )
+                } catch (_: IllegalArgumentException) {
+                    Sorter.Type.None
+                }
+                else Sorter.Type.None
+            sortType = MutableStateFlow(
+                if (prefSortType != Sorter.Type.None && sortTypes.contains(prefSortType))
+                    prefSortType
+                else
+                    initialSortType
             )
+            val adapterType = getAdapterType(this@BaseAdapter)
+            val hasFilter = prefs.getBooleanStrict("FR_SET$adapterType", false)
+            if (hasFilter) {
+                filterRange.value = FilterRange(
+                    prefs.getFloat("FR_MIN$adapterType", 0f),
+                    prefs.getFloat("FR_MAX$adapterType", 0f)
+                )
+            }
         }
         val mayBlock = isSubFragment != null
         var blockMutex = if (mayBlock) Mutex() else null

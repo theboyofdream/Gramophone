@@ -81,7 +81,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
         }
         holder.sortButton.visibility =
             if (adapter.sortType.value != Sorter.Type.None || adapter.canChangeLayout) View.VISIBLE else View.GONE
-        updateSortOrderButton(holder)
+        updateSortButtons(holder)
         holder.sortButton.setOnClickListener { view ->
             val popupMenu = PopupMenu(context, view)
             popupMenu.inflate(R.menu.sort_menu)
@@ -120,12 +120,6 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                 popupMenu.menu.findItem(it.key).isVisible = adapter.canChangeLayout
             }
             popupMenu.menu.findItem(R.id.display).isVisible = adapter.canChangeLayout
-            val currentSortType = adapter.sortType.value
-            val isFilterable = currentSortType == Sorter.Type.BySizeAscending
-                    || currentSortType == Sorter.Type.BySizeDescending
-                    || currentSortType == Sorter.Type.ByDurationAscending
-                    || currentSortType == Sorter.Type.ByDurationDescending
-            popupMenu.menu.findItem(R.id.filter).isVisible = isFilterable
             if (adapter.sortType.value != Sorter.Type.None) {
                 sortTypeToMenuId[adapter.sortType.value]?.let { menuId ->
                     popupMenu.menu.findItem(menuId).isChecked = true
@@ -155,7 +149,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                                     buttonMap[menuItem.itemId].toString()
                                 )
                             }
-                            updateSortOrderButton(holder)
+                            updateSortButtons(holder)
                         }
                         true
                     }
@@ -168,45 +162,6 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                                 putString(
                                     "L" + getAdapterType(adapter).toString(),
                                     layoutMap[menuItem.itemId].toString()
-                                )
-                            }
-                        }
-                        true
-                    }
-
-                    R.id.filter -> {
-                        if (adapter is BaseAdapter<*>) {
-                            val baseAdapter = adapter as BaseAdapter<*>
-                            val currentType = adapter.sortType.value
-                            if (currentType == Sorter.Type.BySizeAscending || currentType == Sorter.Type.BySizeDescending) {
-                                val maxSize = baseAdapter.getMaxSize()
-                                val current = baseAdapter.filterRange.value
-                                FilterRangeDialog.showSizeFilter(
-                                    context, 0f, maxSize,
-                                    current?.min ?: 0f, current?.max ?: maxSize,
-                                    onApply = { min, max ->
-                                        baseAdapter.setFilterRange(min, max)
-                                        updateSortOrderButton(holder)
-                                    },
-                                    onReset = {
-                                        baseAdapter.clearFilter()
-                                        updateSortOrderButton(holder)
-                                    }
-                                )
-                            } else if (currentType == Sorter.Type.ByDurationAscending || currentType == Sorter.Type.ByDurationDescending) {
-                                val maxDuration = baseAdapter.getMaxDuration()
-                                val current = baseAdapter.filterRange.value
-                                FilterRangeDialog.showDurationFilter(
-                                    context, 0f, maxDuration,
-                                    current?.min ?: 0f, current?.max ?: maxDuration,
-                                    onApply = { min, max ->
-                                        baseAdapter.setFilterRange(min, max)
-                                        updateSortOrderButton(holder)
-                                    },
-                                    onReset = {
-                                        baseAdapter.clearFilter()
-                                        updateSortOrderButton(holder)
-                                    }
                                 )
                             }
                         }
@@ -229,7 +184,10 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                     inverseType.toString()
                 )
             }
-            updateSortOrderButton(holder)
+            updateSortButtons(holder)
+        }
+        holder.filterButton.setOnClickListener {
+            showFilterDialog(holder)
         }
         holder.playAll.setOnClickListener {
             if (adapter is SongAdapter) {
@@ -375,7 +333,44 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
         return type.name.endsWith("Ascending")
     }
 
-    private fun updateSortOrderButton(holder: ViewHolder) {
+    private fun showFilterDialog(holder: ViewHolder) {
+        if (adapter !is BaseAdapter<*>) return
+        val baseAdapter = adapter as BaseAdapter<*>
+        val currentType = adapter.sortType.value
+        if (currentType == Sorter.Type.BySizeAscending || currentType == Sorter.Type.BySizeDescending) {
+            val maxSize = baseAdapter.getMaxSize()
+            val current = baseAdapter.filterRange.value
+            FilterRangeDialog.showSizeFilter(
+                context, 0f, maxSize,
+                current?.min ?: 0f, current?.max ?: maxSize,
+                onApply = { min, max ->
+                    baseAdapter.setFilterRange(min, max)
+                    updateSortButtons(holder)
+                },
+                onReset = {
+                    baseAdapter.clearFilter()
+                    updateSortButtons(holder)
+                }
+            )
+        } else if (currentType == Sorter.Type.ByDurationAscending || currentType == Sorter.Type.ByDurationDescending) {
+            val maxDuration = baseAdapter.getMaxDuration()
+            val current = baseAdapter.filterRange.value
+            FilterRangeDialog.showDurationFilter(
+                context, 0f, maxDuration,
+                current?.min ?: 0f, current?.max ?: maxDuration,
+                onApply = { min, max ->
+                    baseAdapter.setFilterRange(min, max)
+                    updateSortButtons(holder)
+                },
+                onReset = {
+                    baseAdapter.clearFilter()
+                    updateSortButtons(holder)
+                }
+            )
+        }
+    }
+
+    private fun updateSortButtons(holder: ViewHolder) {
         val currentType = adapter.sortType.value
         val canToggle = currentType != Sorter.Type.None
                 && Sorter.Type.inverse(currentType) != null
@@ -393,6 +388,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                 || currentType == Sorter.Type.BySizeDescending
                 || currentType == Sorter.Type.ByDurationAscending
                 || currentType == Sorter.Type.ByDurationDescending
+        holder.filterButton.visibility = if (isFilterable) View.VISIBLE else View.GONE
         val hasFilter = isFilterable && (adapter as? BaseAdapter<*>)?.filterRange?.value != null
         holder.filterBadge.visibility = if (hasFilter) View.VISIBLE else View.GONE
     }
@@ -405,6 +401,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
     ) : RecyclerView.ViewHolder(view) {
         val sortButton: MaterialButton = view.findViewById(R.id.sort)
         val sortOrderButton: MaterialButton = view.findViewById(R.id.sort_order)
+        val filterButton: MaterialButton = view.findViewById(R.id.filter)
         val filterBadge: View = view.findViewById(R.id.filter_badge)
         val createPlaylist: MaterialButton = view.findViewById(R.id.create_playlist)
         val playAll: MaterialButton = view.findViewById(R.id.play_all)
