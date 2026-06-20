@@ -2,9 +2,8 @@ package org.akanework.gramophone.ui.fragments.compose
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -68,6 +67,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.Player
 import androidx.media3.common.Player.REPEAT_MODE_ALL
@@ -80,15 +80,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.MultiQueueObject
+import org.akanework.gramophone.logic.age
 import org.akanework.gramophone.logic.deleteQueue
 import org.akanework.gramophone.logic.getInactiveQueues
 import org.akanework.gramophone.logic.getQueue
 import org.akanework.gramophone.logic.loadQueue
+import org.akanework.gramophone.logic.pinQueue
 import org.akanework.gramophone.logic.playOrPause
 import org.akanework.gramophone.logic.supportsWideScreen
+import org.akanework.gramophone.logic.unpinQueue
 import org.akanework.gramophone.logic.utils.Flags
 import org.akanework.gramophone.ui.components.Chronometer
 import org.akanework.gramophone.ui.components.PlaylistQueueSheet
+import org.akanework.gramophone.ui.components.compose.ActionDropdown
+import org.akanework.gramophone.ui.components.compose.DropdownItem
 
 @Composable
 fun MqListItem(
@@ -103,6 +108,9 @@ fun MqListItem(
     onClick: () -> Unit = {},
     onLongClick: () -> Unit = {},
 ) {
+    val expiry by mq.expiry.collectAsState(initial = null)
+    val isPinned = expiry == null
+
     Row( // wrapper
         modifier = modifier
             .padding(horizontal = 16.dp)
@@ -135,23 +143,71 @@ fun MqListItem(
                     .weight(1f, false)
             ) {
                 if (isEditAllowed) {
-                    IconButton(
-                        onClick = {
-                            mqState.removeQueue(index)
-                        },
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_close),
-                            contentDescription = null
-                        )
+                    if (isPinned) {
+                        IconButton(
+                            onClick = {
+                                mqState.togglePin(index)
+                            },
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_keep_off),
+                                contentDescription = null
+                            )
+                        }
+                    } else {
+                        IconButton(
+                            onClick = {
+                                mqState.removeQueue(index)
+                            },
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_close),
+                                contentDescription = null
+                            )
+                        }
                     }
                 }
-                Text(
-                    text = "${index + 1}. ${mq.title}",
-                    maxLines = 1,
-                    overflow = TextOverflow.MiddleEllipsis,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 0.dp)
-                )
+                Column(
+
+                ) {
+                    Text(
+                        text = "${index + 1}. ${mq.getTitleForUi()}",
+                        maxLines = 1,
+                        overflow = TextOverflow.MiddleEllipsis,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 0.dp)
+                    )
+                    if (!isPinned) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp)
+                        ) {
+                            // TODO: why need div by 10 here
+                            val remainingTimeMs = (expiry!! - System.currentTimeMillis()) / 10
+                            Icon(
+                                painter = painterResource(if (remainingTimeMs < 1800000) R.drawable.ic_warning else R.drawable.ic_keep), //TODO: represent state of pin, or the action of this button
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .clickable(onClick = {
+                                        mqState.togglePin(index)
+                                    }),
+                            )
+                            Text(
+                                text = makeTimeString(remainingTimeMs),
+                                color = MaterialTheme.colorScheme.onSurface.copy(0.7f),
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.MiddleEllipsis,
+                                modifier = Modifier
+                                    .padding(horizontal = 4.dp)
+                                    .clickable(onClick = {
+                                        mqState.togglePin(index)
+                                    }),
+                            )
+                        }
+                    }
+                }
             }
 
             if (isEditAllowed) {
@@ -173,13 +229,6 @@ fun MqContent(
     landscape: Boolean,
     onDismiss: (() -> Unit)? = null,
 ) {
-    val animatedMaxHeight by animateDpAsState(
-        targetValue = if (mqState.expanded) 300.dp else 0.dp,
-        animationSpec = spring(
-            stiffness = Spring.StiffnessMediumLow,
-        ),
-        label = "queueListHeight"
-    )
 
     Column(
         modifier = modifier
@@ -193,12 +242,18 @@ fun MqContent(
         )
 
         val lazyQueuesListState = rememberLazyListState()
-        MqList(
-            mqState = mqState,
-            lazyQueuesListState = lazyQueuesListState,
-            modifier = Modifier
-                .heightIn(Dp.Unspecified, if (!landscape) animatedMaxHeight else Dp.Unspecified)
-        )
+        AnimatedVisibility(
+            visible = mqState.expanded,
+            enter = expandVertically(),
+            exit = shrinkVertically()
+        ) {
+            MqList(
+                mqState = mqState,
+                lazyQueuesListState = lazyQueuesListState,
+                modifier = Modifier
+                    .heightIn(Dp.Unspecified, if (!landscape) 300.dp else Dp.Unspecified)
+            )
+        }
 
         ActionBar(
             mqState = mqState,
@@ -317,8 +372,13 @@ fun MqList(
                 isActiveQueue = false,
                 isInactiveActiveQueue = mq == mqState.detachedQueue,
                 onClick = {
-                    mqState.detach(mq)
+                    if (mqState.detachedQueue != mq) {
+                        mqState.detach(mq)
+                        // TODO: scroll to when click
+                    }
                 },
+                modifier = Modifier
+                    .animateItem()
             )
         }
         mqState.activeQueue?.let {
@@ -330,8 +390,12 @@ fun MqList(
                     isActiveQueue = true,
                     isInactiveActiveQueue = false,
                     onClick = {
-                        mqState.resetHead()
+                        if (mqState.isDetached()) {
+                            mqState.resetHead()
+                        }
                     },
+                    modifier = Modifier
+                        .animateItem()
                 )
             }
         }
@@ -440,16 +504,48 @@ fun ActionBar(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
         ) {
-            IconButton(
-                onClick = {
-                },
-                enabled = false,
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_more_vert_alt),
-                    contentDescription = null,
+            val expiry = mqState.getCurrentQueue()?.expiry?.collectAsState(initial = null)
+            val isPinned = expiry == null
+            ActionDropdown(
+                actions = listOf(
+                    DropdownItem(
+                        title = stringResource(R.string.add_to_queue),
+                        leadingIcon = null,
+                        action = {},
+                    ),
+                    DropdownItem(
+                        title = stringResource(R.string.play_next),
+                        leadingIcon = null,
+                        action = {},
+                    ),
+                    DropdownItem(
+                        title = stringResource(R.string.add_to_playlist),
+                        leadingIcon = null,
+                        action = {},
+                    ),
+                    DropdownItem(
+                        title = stringResource(R.string.rename),
+                        leadingIcon = null,
+                        action = {},
+                    ),
+                    DropdownItem(
+                        title = stringResource(
+                            if (isPinned) R.string.mq_pin_queue else R.string.mq_unpin_queue
+                        ),
+                        leadingIcon = null,
+                        action = {
+                            mqState.togglePin()
+                        },
+                    ),
+                    DropdownItem(
+                        title = "DEBUG: Age 2hrs",
+                        leadingIcon = null,
+                        action = {
+                            mqState.age()
+                        },
+                    ),
                 )
-            }
+            )
             AnimatedVisibility(mqState.isDetached()) {
                 IconButton(
                     onClick = {
@@ -711,6 +807,8 @@ class MqState(
     private val coroutineScope: CoroutineScope,
     private val instance: MediaBrowser,
     private val playlistQueueSheet: PlaylistQueueSheet?,
+    private val onDetachHead: ((Int) -> Unit)?,
+    private val onResetHead: (() -> Unit)?,
 ) : Player.Listener {
     val isPlaying = MutableStateFlow(instance.isPlaying)
 
@@ -753,10 +851,10 @@ class MqState(
 
     fun getQueueTitle(): String? {
         return if (!isDetached()) {
-            activeQueue?.title
+            activeQueue
         } else {
-            detachedQueue?.title
-        }
+            detachedQueue
+        }?.getTitleForUi()
     }
 
     fun getQueueLength(): Long {
@@ -780,34 +878,31 @@ class MqState(
     fun isDetached(): Boolean = detachedQueue != null
 
     fun detach(index: Int) {
-        detachedQueue = inactiveQueues.getOrNull(index)
-        detachedQueue?.repeatMode?.let {
-            onRepeatModeChanged(it)
+        val mq = inactiveQueues.getOrNull(index)
+        if (mq == null) {
+            playlistQueueSheet?.forceUpdate()
+            return
         }
-        detachedQueue?.shuffleModeEnabled?.let {
-            onShuffleModeEnabledChanged(it)
-        }
+        onDetachHead?.invoke(index)
+        detachedQueue = mq
+        playlistQueueSheet?.forceUpdate(index)
     }
 
     fun detach(mq: MultiQueueObject) {
+        if (!inactiveQueues.contains(mq)) {
+            playlistQueueSheet?.forceUpdate()
+            return
+        }
+        onDetachHead?.invoke(inactiveQueues.indexOf(mq))
         detachedQueue = mq
         playlistQueueSheet?.forceUpdate(inactiveQueues.indexOf(mq))
-        detachedQueue?.repeatMode?.let {
-            onRepeatModeChanged(it)
-        }
-        detachedQueue?.shuffleModeEnabled?.let {
-            onShuffleModeEnabledChanged(it)
-        }
     }
 
-    fun resetHead() {
+    fun resetHead(updateSongList: Boolean = true) {
+        onResetHead?.invoke()
         detachedQueue = null
-        playlistQueueSheet?.forceUpdate(-1)
-        detachedQueue?.repeatMode?.let {
-            onRepeatModeChanged(it)
-        }
-        detachedQueue?.shuffleModeEnabled?.let {
-            onShuffleModeEnabledChanged(it)
+        if (updateSongList) {
+            playlistQueueSheet?.forceUpdate(-1)
         }
     }
 
@@ -829,7 +924,8 @@ class MqState(
     }
 
     fun removeQueue(index: Int = getQueueListSize() - 1) {
-        instance.deleteQueue(index)
+        val status = instance.deleteQueue(index)
+        if (!status) return
         coroutineScope.launch {
             init()
         }
@@ -844,7 +940,7 @@ class MqState(
     fun loadDetached() {
         instance.loadQueue(inactiveQueues.indexOf(detachedQueue))
         expanded = false
-        resetHead()
+        resetHead(false)
         coroutineScope.launch {
             delay(500)
             init()
@@ -881,6 +977,35 @@ class MqState(
     override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
         this.shuffleModeEnabled.value = shuffleModeEnabled
     }
+
+    fun togglePin(index: Int = inactiveQueues.indexOf(getCurrentQueue())) {
+        // in the UI, active queue is appended onto the end of inactives
+        val index = if (index >= inactiveQueues.size) {
+            -1
+        } else {
+            index
+        }
+        val queue = (if (index == -1) activeQueue else inactiveQueues[index])!!
+
+        if (queue.expiry.value != null) {
+            if (instance.pinQueue(index)) {
+                queue.expiry.value = null
+            }
+        } else {
+            val expiry = instance.unpinQueue(index)
+            if (expiry != -1L) {
+                queue.expiry.value = expiry
+            }
+        }
+    }
+
+    /**
+     * Get currently visible queue in the ui. Do not assume the media item list is complete.
+     */
+    fun getCurrentQueue() = detachedQueue ?: activeQueue
+    fun age() {
+        instance.age()
+    }
 }
 
 @Composable
@@ -888,8 +1013,10 @@ fun rememberMqState(
     coroutineScope: CoroutineScope,
     instance: MediaBrowser,
     playlistQueueSheet: PlaylistQueueSheet?,
+    onDetachHead: ((Int) -> Unit)?,
+    onResetHead: (() -> Unit)?,
 ): MqState {
     return remember {
-        MqState(coroutineScope, instance, playlistQueueSheet)
+        MqState(coroutineScope, instance, playlistQueueSheet, onDetachHead, onResetHead)
     } // TODO: rememberSaveable
 }

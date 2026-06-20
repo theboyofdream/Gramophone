@@ -8,6 +8,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -23,18 +24,20 @@ import androidx.media3.session.MediaBrowser
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted.Companion.WhileSubscribed
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.dpToPx
 import org.akanework.gramophone.logic.getBooleanStrict
 import org.akanework.gramophone.logic.getQueueForUi
+import org.akanework.gramophone.logic.loadQueue
 import org.akanework.gramophone.logic.replaceAllSupport
 import org.akanework.gramophone.logic.ui.MyRecyclerView
 import org.akanework.gramophone.logic.utils.Flags
@@ -45,21 +48,25 @@ import org.akanework.gramophone.ui.fragments.compose.QueueRoot
 import org.akanework.gramophone.ui.fragments.compose.rememberMqState
 import java.util.LinkedList
 
-// TODO: Playing indicator does not update when shuffling
 class PlaylistQueueSheet(
     context: Context, private val activity: MainActivity
 ) : BottomSheetDialog(context), Player.Listener {
-    private var prefs: SharedPreferences
     private val instance: MediaBrowser?
         get() = activity.getPlayer()
     private val playlistAdapter: PlaylistCardAdapter
     private val touchHelper: ItemTouchHelper
+    private val recyclerView: RecyclerView
     private val durationView: Chronometer
     private val queueHead: ComposeView
     private val mqEnabled: Boolean
 
+    // depending on the queue state, we may need to modify behaviour of certain UI elements outside
+    // the compose queue elements
+    private var detachedHead = MutableStateFlow(false)
+    private var detachedQueue: Int? = null
+
     init {
-        prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
         mqEnabled = Flags.MQ_PREVIEW && prefs.getBooleanStrict("mq_preview", false)
 
         setContentView(R.layout.playlist_bottom_sheet)
@@ -68,7 +75,7 @@ class PlaylistQueueSheet(
             behavior.maxWidth = 900.dpToPx(context)
         }
 
-        val recyclerView = findViewById<MyRecyclerView>(R.id.recyclerview)!!
+        recyclerView = findViewById<MyRecyclerView>(R.id.recyclerview)!!
 
         ViewCompat.setOnApplyWindowInsetsListener(recyclerView) { v, ic ->
             val i = ic.getInsets(
@@ -101,12 +108,14 @@ class PlaylistQueueSheet(
         touchHelper.attachToRecyclerView(recyclerView)
         recyclerView.layoutManager = LinearLayoutManager(context)
         recyclerView.adapter = playlistAdapter
-        recyclerView.scrollToPositionWithOffsetCompat(
-            playlistAdapter.playlist.first.indexOfFirst { i ->
-                i == (instance?.currentMediaItemIndex ?: 0)
-            }, // quick UX hack to show there's more songs above (well, if there is).
-            (context.resources.getDimensionPixelOffset(R.dimen.list_height) * 0.5f).toInt()
-        )
+        playlistAdapter.playlist.first.indexOfFirst { i ->
+            i == (instance?.currentMediaItemIndex ?: 0)
+        }.let { scrollPos ->
+            recyclerView.scrollToPositionWithOffsetCompat(scrollPos,
+                // quick UX hack to show there's more songs above (well, if there is).
+                if (scrollPos >= playlistAdapter.playlist.first.size - 2) 0 else (context
+                    .resources.getDimensionPixelOffset(R.dimen.list_height) * 0.5f).toInt())
+        }
         recyclerView.fastScroll(null, null)
 
         durationView = Chronometer(context)
@@ -141,37 +150,28 @@ class PlaylistQueueSheet(
                     pureDark = pureDark
                 ) {
                     val mqState =
-                        rememberMqState(coroutineScope, instance!!, this@PlaylistQueueSheet)
+                        rememberMqState(
+                            coroutineScope, instance!!, this@PlaylistQueueSheet,
+                            onDetachHead = {
+                                detachedHead.value = true
+                                detachedQueue = it
+                            },
+                            onResetHead = {
+                                detachedHead.value = false
+                                // detachedQueue is "consumed" by the LaunchedEffect below
+                            },
+                        )
                     val pagerState = rememberPagerState(
                         initialPage = if (Flags.MQ_PREVIEW) 0 else 1,
                         pageCount = { 2 }
                     )
 
-                    LaunchedEffect(mqState.detachedQueue) {
-                        coroutineScope.launch {
-                            if (mqState.isDetached()) {
-                                playlistAdapter.currentMediaItemIndex =
-                                    mqState.detachedQueue?.startIndex
-                                recyclerView.smoothScrollToPosition(
-                                    playlistAdapter.playlist.first.indexOfFirst { i ->
-                                        i == (mqState.detachedQueue?.startIndex ?: 0)
-                                    }.let {
-                                        return@let if (it == -1) 0 else it
-                                    })
-                            } else {
-                                playlistAdapter.currentMediaItemIndex =
-                                    instance?.currentMediaItemIndex.let {
-                                        playlistAdapter.playlist.first.indexOf(
-                                            it
-                                        )
-                                    }
-                                recyclerView.smoothScrollToPosition(
-                                    playlistAdapter.playlist.first.indexOfFirst { i ->
-                                        i == (instance?.currentMediaItemIndex ?: 0)
-                                    }.let {
-                                        return@let if (it == -1) 0 else it
-                                    })
-                            }
+                    val igiveupnamingvariables by detachedHead.collectAsState()
+                    LaunchedEffect(igiveupnamingvariables) {
+                        if (!detachedHead.value && detachedQueue != null) {
+                            mqState.resetHead(false)
+                            mqState.toggleExpand()
+                            detachedQueue = null
                         }
                     }
 
@@ -213,6 +213,7 @@ class PlaylistQueueSheet(
         mediaItem: MediaItem?,
         reason: @Player.MediaItemTransitionReason Int
     ) {
+        if (detachedHead.value) return
         val i = instance?.currentMediaItemIndex
         playlistAdapter.currentMediaItemIndex = i?.let { playlistAdapter.playlist.first.indexOf(i) }
     }
@@ -222,6 +223,7 @@ class PlaylistQueueSheet(
         newPosition: Player.PositionInfo,
         reason: @Player.DiscontinuityReason Int
     ) {
+        if (detachedHead.value) return
         playlistAdapter.updateTimer()
     }
 
@@ -276,6 +278,8 @@ class PlaylistQueueSheet(
             }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int, payloads: List<Any?>) {
+            holder.dragHandle.visibility = if (detachedHead.value) View.GONE else View.VISIBLE
+            holder.closeButton.visibility = if (detachedHead.value) View.GONE else View.VISIBLE
             if (payloads.isNotEmpty()) {
                 if (payloads.none { it is Boolean && it }) {
                     holder.nowPlaying.drawable?.level = if (currentIsPlaying == true) 1 else 0
@@ -306,6 +310,8 @@ class PlaylistQueueSheet(
             (holder.nowPlaying.drawable as? NowPlayingDrawable?)?.level2Done = null
             holder.nowPlaying.setImageDrawable(null)
             holder.nowPlaying.visibility = View.GONE
+            holder.dragHandle.visibility = if (detachedHead.value) View.GONE else View.VISIBLE
+            holder.closeButton.visibility = if (detachedHead.value) View.GONE else View.VISIBLE
             super.onViewRecycled(holder)
         }
 
@@ -314,7 +320,14 @@ class PlaylistQueueSheet(
         else playlist.first.size
 
         override fun onClick(pos: Int) {
-            instance?.seekToDefaultPosition(playlist.first[pos])
+            if (detachedHead.value) {
+                detachedQueue?.let {
+                    detachedHead.value = false
+                    instance?.loadQueue(it, playlist.first[pos])
+                }
+            } else {
+                instance?.seekToDefaultPosition(playlist.first[pos])
+            }
         }
 
         override fun onRowMoved(from: Int, to: Int) {
@@ -328,8 +341,15 @@ class PlaylistQueueSheet(
             playlist.second.add(to1, movedItem)
             mediaController?.moveMediaItem(from1, to1)
             notifyItemMoved(from, to)
-            if (currentMediaItemIndex == from)
-                currentMediaItemIndex = to
+            val currentIndex = currentMediaItemIndex
+            if (currentIndex != null) {
+                if (currentIndex == from)
+                    currentMediaItemIndex = to
+                else if (from < to && from < currentIndex && currentIndex <= to)
+                    currentMediaItemIndex = currentIndex - 1
+                else if (from > to && to <= currentIndex && currentIndex < from)
+                    currentMediaItemIndex = currentIndex + 1
+            }
             updateTimer() // TODO: this could be more efficient
         }
 
@@ -353,7 +373,7 @@ class PlaylistQueueSheet(
             touchHelper.startDrag(holder)
         }
 
-        private fun dumpPlaylist(): Pair<MutableList<Int>, MutableList<MediaItem>> {
+        fun dumpPlaylist(): Pair<MutableList<Int>, MutableList<MediaItem>> {
             val items = LinkedList<MediaItem>()
             val instance = activity.getPlayer()!!
             for (i in 0 until instance.mediaItemCount) {
@@ -372,18 +392,36 @@ class PlaylistQueueSheet(
         /**
          * Update playlist and timer
          */
-        fun updateList(mqIndex: Int? = null) {
+        fun updateList(
+            mqIndex: Int? = null,
+            newPlaylist: Pair<MutableList<Int>, MutableList<MediaItem>>? = null
+        ) {
             val mq = mqIndex?.let { instance?.getQueueForUi(mqIndex) }
-            val pl = if (mq != null) Pair(mq.first, mq.second.queue) else dumpPlaylist()
+            val pl = if (mq != null) {
+                Pair(mq.first, mq.second.queue)
+            } else {
+                newPlaylist ?: dumpPlaylist()
+            }
             playlist = pl
             notifyDataSetChanged()
+
+            // update playing indicator, scroll to, drag handle visibility
+            val i = (mq?.second?.startIndex ?: instance?.currentMediaItemIndex).let {
+                if (it == -1) 0 else it
+            }
+            currentMediaItemIndex = i?.let { playlist.first.indexOf(i) }
+            recyclerView.post {
+                recyclerView.smoothScrollToPosition(currentMediaItemIndex ?: 0)
+            }
+
             updateTimer(mq?.second?.startIndex, mq?.second?.startPositionMs)
         }
 
         fun updateTimer(currentMediaItemIndex: Int? = null, currentPosition: Long? = null) {
             if (currentMediaItemIndex == -1) return
             val current = currentMediaItemIndex ?: instance?.currentMediaItemIndex?.let {
-                playlist.first.indexOf(it).takeIf { it != -1 } } ?: 0
+                playlist.first.indexOf(it).takeIf { it != -1 }
+            } ?: 0
             if (current < 0) return
             val elapsedCurrentMs = currentPosition ?: instance?.currentPosition ?: 0
             durationView.format = context.getString(

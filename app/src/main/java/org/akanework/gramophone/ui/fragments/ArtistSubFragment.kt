@@ -18,6 +18,7 @@
 package org.akanework.gramophone.ui.fragments
 
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -50,6 +51,10 @@ import org.akanework.gramophone.ui.adapters.SongAdapter
  * @see GeneralSubFragment
  */
 class ArtistSubFragment : BaseFragment(true), PopupTextProvider {
+    companion object {
+        private const val TAG = "ArtistSubFragment"
+    }
+
     private lateinit var albumAdapter: AlbumAdapter
     private lateinit var songAdapter: SongAdapter
     private var recyclerView: MyRecyclerView? = null
@@ -72,15 +77,15 @@ class ArtistSubFragment : BaseFragment(true), PopupTextProvider {
             if (itemType == R.id.album_artist)
                 it.albumArtistListFlow else it.artistListFlow
         }.map { it.find { it.id == id } }
-        val qTitle = item.map { it?.title ?: "MISSING TITLE (ArtistSubFragment)" }
+        val title = item.map { it?.title ?: requireContext().getString(R.string.unknown_artist) }
         albumAdapter = AlbumAdapter(
-            this, qTitle, item.map { it?.albumList },
+            this, title, item.map { it?.albumList },
             isSubFragment = itemType
         )
         albumAdapter.decorAdapter.jumpDownPos = { albumAdapter.concatAdapter.itemCount }
         songAdapter = SongAdapter(
             this,
-            qTitle,
+            title,
             item.map { it?.songList },
             isSubFragment = itemType
         )
@@ -102,7 +107,6 @@ class ArtistSubFragment : BaseFragment(true), PopupTextProvider {
         topAppBar.setNavigationOnClickListener {
             requireActivity().supportFragmentManager.popBackStack()
         }
-        val title = item.map { it?.title ?: requireContext().getString(R.string.unknown_artist) }
         lifecycleScope.launch(Dispatchers.Default) {
             title.collect {
                 withContext(Dispatchers.Main) {

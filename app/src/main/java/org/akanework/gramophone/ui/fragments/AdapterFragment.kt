@@ -20,6 +20,7 @@ package org.akanework.gramophone.ui.fragments
 import android.content.Context
 import android.content.IntentSender
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -55,6 +56,10 @@ import org.akanework.gramophone.ui.adapters.Sorter
  * @author nift4
  */
 class AdapterFragment : BaseFragment(null) {
+    companion object {
+        private const val TAG = "AdapterFragment"
+    }
+
     private lateinit var adapter: BaseInterface<*>
     private lateinit var recyclerView: MyRecyclerView
     private var pendingRequest: Bundle? = null
@@ -140,9 +145,9 @@ class AdapterFragment : BaseFragment(null) {
             R.id.folders -> R.string.folders
             R.id.detailed_folders -> R.string.folders
             R.id.playlists -> R.string.category_playlists
-            else -> null
+            -1, null -> throw IllegalArgumentException("unset ID value")
+            else -> throw IllegalArgumentException("invalid ID value")
         }
-        if (stringId == null) return flowOf("MISSING TITLE (AdapterFragment)")
         return flowOf(requireContext().getString( stringId))
     }
 

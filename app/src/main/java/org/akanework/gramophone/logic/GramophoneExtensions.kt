@@ -35,7 +35,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Message
 import android.os.StrictMode
-import android.os.ext.SdkExtensions
 import android.view.View
 import android.view.ViewGroup.MarginLayoutParams
 import android.view.ViewPropertyAnimator
@@ -59,7 +58,6 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.children
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updateMargins
-import androidx.media3.common.BundleListRetriever
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
@@ -77,6 +75,7 @@ import org.akanework.gramophone.BuildConfig
 import org.akanework.gramophone.R
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_GET_AUDIO_FORMAT
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_GET_LYRICS
+import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_AGE
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_DEL
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_GET_INACTIVE_LIST
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_GET_QUEUE_FOR_UI
@@ -85,12 +84,14 @@ import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVIC
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_REORDER
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QB_UNPIN_QUEUE
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_QUERY_TIMER
+import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_SET_MEDIA_ITEMS_SEAMLESSLY
 import org.akanework.gramophone.logic.GramophonePlaybackService.Companion.SERVICE_SET_TIMER
 import org.akanework.gramophone.logic.utils.AfFormatInfo
 import org.akanework.gramophone.logic.utils.AudioFormatDetector
 import org.akanework.gramophone.logic.utils.AudioTrackInfo
 import org.akanework.gramophone.logic.utils.BtCodecInfo
 import org.akanework.gramophone.logic.utils.CalculationUtils
+import org.akanework.gramophone.logic.utils.MediaItemList
 import org.akanework.gramophone.logic.utils.ReplayGainUtil
 import org.akanework.gramophone.logic.utils.SemanticLyrics
 import org.akanework.gramophone.ui.MainActivity
@@ -307,6 +308,16 @@ fun MediaController.setTimer(value: Int, waitUntilSongEnd: Boolean) {
     )
 }
 
+fun MediaController.setMediaItemsSeamlessly(items: List<MediaItem>, position: Int, title: String) {
+    sendCustomCommand(
+        SessionCommand(SERVICE_SET_MEDIA_ITEMS_SEAMLESSLY, Bundle.EMPTY).apply {
+            customExtras.putBinder("items", MediaItemList(items))
+            customExtras.putInt("position", position)
+            customExtras.putString("title", title)
+        }, Bundle.EMPTY
+    )
+}
+
 inline fun <reified T> MutableList<T>.forEachSupport(skipFirst: Int = 0, operator: (T) -> Unit) {
     val li = listIterator()
     var skip = skipFirst
@@ -367,9 +378,7 @@ fun MediaController.getInactiveQueues(): List<MultiQueueObject> =
         Bundle.EMPTY
     ).get().extras.run {
         val binder = getBinder("allQueues")!!
-        BundleListRetriever.getList(binder).map {
-            MultiQueueObject.fromBundle(it)
-        }
+        MultiQueueList.getList(binder)
     }
 
 fun MediaController.getQueue(index: Int = C.INDEX_UNSET): MultiQueueObject? =
@@ -379,38 +388,8 @@ fun MediaController.getQueue(index: Int = C.INDEX_UNSET): MultiQueueObject? =
         }, Bundle.EMPTY
     ).get().extras.run {
         val binder = getBinder("allQueues")!!
-        BundleListRetriever.getList(binder).map {
-            MultiQueueObject.fromBundle(it)
-        }.firstOrNull()
+        MultiQueueList.getList(binder).firstOrNull()
     }
-
-
-fun shuffledItems(
-    items: List<MediaItem>,
-    order: ShuffleOrder
-): List<MediaItem> {
-    val result = mutableListOf<MediaItem>()
-
-    var i = order.firstIndex
-    while (i != C.INDEX_UNSET) {
-        result.add(items[i])
-        i = order.getNextIndex(i)
-    }
-
-    return result
-}
-
-fun shuffledIndices(order: ShuffleOrder): MutableList<Int> {
-    val result = mutableListOf<Int>()
-
-    var i = order.firstIndex
-    while (i != C.INDEX_UNSET) {
-        result.add(i)
-        i = order.getNextIndex(i)
-    }
-
-    return result
-}
 
 fun MediaController.getQueueForUi(index: Int = -1): Pair<MutableList<Int>, MultiQueueObject>? {
     if (index == -1) {
@@ -422,12 +401,11 @@ fun MediaController.getQueueForUi(index: Int = -1): Pair<MutableList<Int>, Multi
         }, Bundle.EMPTY
     ).get().extras.run {
         val binder = getBinder("allQueues")!!
-        BundleListRetriever.getList(binder).map {
-            val mq = MultiQueueObject.fromBundle(it)
-            val indexes: MutableList<Int> = if (mq.shuffleOrder == null) {
+        MultiQueueList.getList(binder).map { mq ->
+            val indexes: MutableList<Int> = if (mq.shuffleOrder?.data == null) {
                 (0 until mq.getSize()).toMutableList()
             } else {
-                getIntArray("shuffleIndexes")!!.toMutableList()
+                mq.shuffleOrder!!.data!!.toMutableList()
             }
 
             Pair(indexes, mq)
@@ -435,30 +413,37 @@ fun MediaController.getQueueForUi(index: Int = -1): Pair<MutableList<Int>, Multi
     }
 }
 
-fun MediaController.loadQueue(index: Int) {
+fun MediaController.loadQueue(index: Int, startIndex: Int = C.INDEX_UNSET) {
     sendCustomCommand(
         SessionCommand(SERVICE_QB_LOAD_QUEUE, Bundle.EMPTY).apply {
             customExtras.putInt("index", index)
+            customExtras.putInt("startIndex", startIndex)
         }, Bundle.EMPTY
     )
 }
 
-fun MediaController.pinQueue(index: Int) {
+fun MediaController.pinQueue(index: Int): Boolean =
     sendCustomCommand(
         SessionCommand(SERVICE_QB_PIN_QUEUE, Bundle.EMPTY).apply {
             customExtras.putInt("index", index)
         }, Bundle.EMPTY
-    )
-}
+    ).get().extras.run {
+        if (containsKey("status"))
+            getBoolean("status")
+        else throw IllegalArgumentException("expected status to be set")
+    }
 
 
-fun MediaController.unQueue(index: Int) {
+fun MediaController.unpinQueue(index: Int): Long =
     sendCustomCommand(
         SessionCommand(SERVICE_QB_UNPIN_QUEUE, Bundle.EMPTY).apply {
             customExtras.putInt("index", index)
         }, Bundle.EMPTY
-    )
-}
+    ).get().extras.run {
+        if (containsKey("expiry"))
+            getLong("expiry")
+        else throw IllegalArgumentException("expected expiry to be set")
+    }
 
 
 fun MediaController.deleteQueue(index: Int): Boolean =
@@ -483,6 +468,10 @@ fun MediaController.reorderQueue(from: Int, to: Int): Boolean =
             getBoolean("status")
         else throw IllegalArgumentException("expected status to be set")
     }
+
+fun MediaController.age() {
+    sendCustomCommand(SessionCommand(SERVICE_QB_AGE, Bundle.EMPTY), Bundle.EMPTY)
+}
 
 fun Tracks.getFirstSelectedTrackFormatByType(type: @C.TrackType Int): Format? {
     for (i in groups) {
@@ -655,11 +644,6 @@ fun Context.supportsWideScreen() : Boolean {
     return config.screenWidthDp >= 780
 }
 
-fun Context.isTablet() : Boolean {
-    val config = resources.configuration
-    return config.smallestScreenWidthDp >= 780
-}
-
 val Context.gramophoneApplication
     get() = this.applicationContext as GramophoneApplication
 
@@ -800,3 +784,16 @@ operator fun PaddingValues.plus(other: PaddingValues): PaddingValues = PaddingVa
             other.calculateEndPadding(LayoutDirection.Ltr),
     bottom = this.calculateBottomPadding() + other.calculateBottomPadding(),
 )
+
+fun queueWithTitle(mediaItems: List<MediaItem>, mqTitle: String?): List<MediaItem> {
+    if (mediaItems.isEmpty() || mqTitle == null) return mediaItems
+    val firstMediaItem = mediaItems.first()
+    val newFirstMediaItem = firstMediaItem.buildUpon().setMediaMetadata(
+        firstMediaItem.mediaMetadata.buildUpon().setExtras(
+            (firstMediaItem.mediaMetadata.extras?.let { Bundle(it) } ?: Bundle()).apply {
+                putString("mq_title", mqTitle)
+            }
+        ).build()
+    ).build()
+    return listOf(newFirstMediaItem) + mediaItems.drop(1)
+}

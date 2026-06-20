@@ -18,7 +18,6 @@
 package org.akanework.gramophone.ui.adapters
 
 import android.content.Context
-import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
@@ -30,7 +29,6 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player.REPEAT_MODE_OFF
 import androidx.preference.PreferenceManager
-import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.flow.first
@@ -41,7 +39,7 @@ import org.akanework.gramophone.logic.ui.ItemHeightHelper
 import org.akanework.gramophone.logic.ui.MyRecyclerView
 import org.akanework.gramophone.logic.ui.QuickLinearSmoothScroller
 import org.akanework.gramophone.logic.utils.FilterRangeDialog
-import org.akanework.gramophone.logic.utils.exoplayer.EndedWorkaroundPlayer.Companion.queueWithTitle
+import org.akanework.gramophone.logic.queueWithTitle
 import org.akanework.gramophone.ui.fragments.AdapterFragment
 import org.akanework.gramophone.ui.getAdapterType
 
@@ -206,7 +204,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                     setMediaItems(
                         queueWithTitle(
                             songList,
-                            runBlocking { adapter.queueTitle.first() }
+                            runBlocking { adapter.queueTitle!!.first() }
                         )
                     )
                     if (songList.isNotEmpty()) {
@@ -243,7 +241,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                     setMediaItems(
                         queueWithTitle(
                             songList,
-                            runBlocking { adapter.queueTitle.first() }
+                            runBlocking { adapter.queueTitle!!.first() }
                         )
                     )
                     if (songList.isNotEmpty()) {
@@ -261,7 +259,8 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                         setMediaItems(
                             queueWithTitle(
                                 albums.shuffled().flatMap { it.songList },
-                                runBlocking { adapter.queueTitle.first() }
+                                context.getString(R.string.shuffled,
+                                    runBlocking { adapter.queueTitle.first() })
                             )
                         )
                         prepare()
