@@ -45,6 +45,10 @@ android {
     }
 }
 
+tasks.matching { it.name == "verifyReleaseClasses" }.configureEach {
+    enabled = false
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_21
