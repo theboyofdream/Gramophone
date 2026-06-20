@@ -26,7 +26,7 @@ object FilterRangeDialog {
         title.text = context.getString(R.string.filter_by_size)
         slider.valueFrom = minBytes
         slider.valueTo = maxBytes
-        slider.stepSize = if (maxBytes - minBytes > 1_000_000f) 100_000f else 1_000f
+        slider.stepSize = 0f
         slider.values = listOf(currentMin.coerceIn(minBytes, maxBytes), currentMax.coerceIn(minBytes, maxBytes))
 
         fun formatBytes(bytes: Float): String {
@@ -78,7 +78,7 @@ object FilterRangeDialog {
         title.text = context.getString(R.string.filter_by_duration)
         slider.valueFrom = minMs
         slider.valueTo = maxMs
-        slider.stepSize = ((maxMs - minMs) / 100f).coerceAtLeast(1000f)
+        slider.stepSize = 0f
         slider.values = listOf(currentMin.coerceIn(minMs, maxMs), currentMax.coerceIn(minMs, maxMs))
 
         fun formatDuration(ms: Float): String {
