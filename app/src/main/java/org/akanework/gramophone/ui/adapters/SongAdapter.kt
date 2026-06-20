@@ -41,6 +41,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.akanework.gramophone.R
+import org.akanework.gramophone.logic.allowDiskAccessInStrictMode
 import org.akanework.gramophone.logic.getBooleanStrict
 import org.akanework.gramophone.logic.getFile
 import org.akanework.gramophone.logic.gramophoneApplication
@@ -179,7 +180,7 @@ class SongAdapter(
         super.onAttachedToRecyclerView(recyclerView)
         if (folder) {
             prefs.registerOnSharedPreferenceChangeListener(this)
-            showFileNames = prefs.getBooleanStrict("show_file_names", true)
+            showFileNames = allowDiskAccessInStrictMode { prefs.getBooleanStrict("show_file_names", true) }
         }
     }
 
@@ -192,7 +193,7 @@ class SongAdapter(
     @SuppressLint("NotifyDataSetChanged")
     override fun onSharedPreferenceChanged(prefs: SharedPreferences?, key: String?) {
         if ((key == null || key == "show_file_names") && folder) {
-            showFileNames = this.prefs.getBooleanStrict("show_file_names", true)
+            showFileNames = allowDiskAccessInStrictMode { this.prefs.getBooleanStrict("show_file_names", true) }
             notifyDataSetChanged()
         }
     }

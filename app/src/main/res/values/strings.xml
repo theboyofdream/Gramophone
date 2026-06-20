@@ -1289,4 +1289,5 @@ supporting local search. This string is displayed in the search bar when using G
     <!-- Settings toggle in experimental to enable advanced workflow across the app, allowing to
     have multiple queues -->
     <string name="settings_mq_enabled">Multiple queues</string>
+    <string name="paused_due_to_zero_volume">Paused — volume is zero</string>
 </resources>

@@ -28,11 +28,12 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.preference.PreferenceManager
+import org.akanework.gramophone.logic.allowDiskAccessInStrictMode
+import org.akanework.gramophone.logic.getStringStrict
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.tabs.TabLayout
 import org.akanework.gramophone.R
-import org.akanework.gramophone.logic.getStringStrict
 import org.akanework.gramophone.logic.hasImprovedMediaStore
 import org.akanework.gramophone.ui.MainActivity
 import org.akanework.gramophone.ui.fragments.AdapterFragment
@@ -48,10 +49,11 @@ class ViewPager2Adapter(
 ) : FragmentStateAdapter(fragmentManager, lifecycle),
     SharedPreferences.OnSharedPreferenceChangeListener, DefaultLifecycleObserver {
 
-    private val prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
-    private var tabs = mapSettingToTabList(prefs.getStringStrict("tabs", "")!!)
+    private val prefs by lazy { allowDiskAccessInStrictMode { PreferenceManager.getDefaultSharedPreferences(context.applicationContext) } }
+    private var tabs: List<Tab?> = emptyList()
 
     init {
+        tabs = allowDiskAccessInStrictMode { mapSettingToTabList(prefs.getStringStrict("tabs", "")!!) }
         prefs.registerOnSharedPreferenceChangeListener(this)
         lifecycle.addObserver(this)
     }
@@ -64,7 +66,7 @@ class ViewPager2Adapter(
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         if (key != "tabs") return
         val currentItemId = tabs[viewPager2.currentItem]
-        tabs = mapSettingToTabList(prefs.getStringStrict("tabs", "")!!)
+        tabs = allowDiskAccessInStrictMode { mapSettingToTabList(prefs.getStringStrict("tabs", "")!!) }
         viewPager2.adapter!!.notifyDataSetChanged()
         if (tabs.contains(currentItemId)) {
             val newPosition = tabs.indexOfFirst { it == currentItemId }

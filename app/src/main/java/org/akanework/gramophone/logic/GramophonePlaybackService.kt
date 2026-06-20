@@ -30,6 +30,7 @@ import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.media.audiofx.AudioEffect
 import android.net.Uri
 import android.os.Build
@@ -277,6 +278,31 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
                     )?.codecConfig
                 )
                 Log.d(TAG, "new bluetooth codec config $btInfo")
+            }
+        }
+    }
+
+    private var pausedByZeroVolume = false
+    private val volumeZeroReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != "android.media.VOLUME_CHANGED_ACTION") return
+            val streamType = intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1)
+            if (streamType != AudioManager.STREAM_MUSIC) return
+            val volume = intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_VALUE", -1)
+            val player = endedWorkaroundPlayer ?: return
+            if (volume == 0 && player.isPlaying) {
+                player.pause()
+                pausedByZeroVolume = true
+                handler.post {
+                    android.widget.Toast.makeText(
+                        this@GramophonePlaybackService,
+                        R.string.paused_due_to_zero_volume,
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } else if (volume > 0 && pausedByZeroVolume) {
+                pausedByZeroVolume = false
+                player.play()
             }
         }
     }
@@ -544,6 +570,13 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
             @SuppressLint("WrongConstant") // why is this needed?
             ContextCompat.RECEIVER_EXPORTED
         )
+        ContextCompat.registerReceiver(
+            this,
+            volumeZeroReceiver,
+            IntentFilter("android.media.VOLUME_CHANGED_ACTION"),
+            @SuppressLint("WrongConstant")
+            ContextCompat.RECEIVER_EXPORTED
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O /* before 8, only sbc was supported */) {
             proxy = BtCodecInfo.getCodec(this) {
                 Log.d(TAG, "first bluetooth codec config $btInfo")
@@ -745,6 +778,7 @@ class GramophonePlaybackService : MediaLibraryService(), MediaSessionService.Lis
         instanceForWidgetAndLyricsOnly = null
         unregisterReceiver(seekReceiver)
         unregisterReceiver(btReceiver)
+        unregisterReceiver(volumeZeroReceiver)
         prefs.unregisterOnSharedPreferenceChangeListener(this)
         // Important: this must happen before sending stop() as that changes state ENDED -> IDLE
         lastPlayedManager.save()

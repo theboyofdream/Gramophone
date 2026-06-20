@@ -123,7 +123,7 @@ abstract class BaseAdapter<T : Any>(
     protected var recyclerView: MyRecyclerView? = null
         private set
 
-    protected val prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
+    protected val prefs by lazy { allowDiskAccessInStrictMode { PreferenceManager.getDefaultSharedPreferences(context.applicationContext) } }
 
     override var layoutType: LayoutType? = null
         @SuppressLint("NotifyDataSetChanged")
@@ -354,29 +354,33 @@ abstract class BaseAdapter<T : Any>(
 
     fun setFilterRange(min: Float, max: Float) {
         filterRange.value = FilterRange(min, max)
-        prefs.edit {
-            putFloat("FR_MIN" + getAdapterType(this@BaseAdapter).toString(), min)
-            putFloat("FR_MAX" + getAdapterType(this@BaseAdapter).toString(), max)
-            putBoolean("FR_SET" + getAdapterType(this@BaseAdapter).toString(), true)
+        allowDiskAccessInStrictMode {
+            prefs.edit {
+                putFloat("FR_MIN" + getAdapterType(this@BaseAdapter).toString(), min)
+                putFloat("FR_MAX" + getAdapterType(this@BaseAdapter).toString(), max)
+                putBoolean("FR_SET" + getAdapterType(this@BaseAdapter).toString(), true)
+            }
         }
     }
 
     fun clearFilter() {
         filterRange.value = null
-        prefs.edit {
-            remove("FR_MIN" + getAdapterType(this@BaseAdapter).toString())
-            remove("FR_MAX" + getAdapterType(this@BaseAdapter).toString())
-            remove("FR_SET" + getAdapterType(this@BaseAdapter).toString())
+        allowDiskAccessInStrictMode {
+            prefs.edit {
+                remove("FR_MIN" + getAdapterType(this@BaseAdapter).toString())
+                remove("FR_MAX" + getAdapterType(this@BaseAdapter).toString())
+                remove("FR_SET" + getAdapterType(this@BaseAdapter).toString())
+            }
         }
     }
 
     fun getMaxSize(): Float {
-        val items = list?.second ?: return 0f
+        val items = list?.first ?: return 0f
         return items.maxOfOrNull { sorter.sortingHelper.getSize(it).toFloat() } ?: 0f
     }
 
     fun getMaxDuration(): Float {
-        val items = list?.second ?: return 0f
+        val items = list?.first ?: return 0f
         return items.maxOfOrNull { sorter.sortingHelper.getDuration(it).toFloat() } ?: 0f
     }
 

@@ -36,6 +36,7 @@ import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.akanework.gramophone.R
+import org.akanework.gramophone.logic.allowDiskAccessInStrictMode
 import org.akanework.gramophone.logic.ui.ItemHeightHelper
 import org.akanework.gramophone.logic.ui.MyRecyclerView
 import org.akanework.gramophone.logic.ui.QuickLinearSmoothScroller
@@ -52,7 +53,7 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
     protected val context: Context = adapter.context
     private val dpHeight = context.resources.getDimensionPixelSize(R.dimen.decor_height)
     private var recyclerView: MyRecyclerView? = null
-    private var prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
+    private val prefs by lazy { allowDiskAccessInStrictMode { PreferenceManager.getDefaultSharedPreferences(context.applicationContext) } }
     var jumpUpPos: (() -> Int)? = null
     var jumpDownPos: (() -> Int)? = null
     var offsetPos: (() -> Int)? = null
@@ -143,11 +144,13 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                         if (!menuItem.isChecked) {
                             adapter.sort(buttonMap[menuItem.itemId]!!)
                             menuItem.isChecked = true
-                            prefs.edit {
-                                putString(
-                                    "S" + getAdapterType(adapter).toString(),
-                                    buttonMap[menuItem.itemId].toString()
-                                )
+                            allowDiskAccessInStrictMode {
+                                prefs.edit {
+                                    putString(
+                                        "S" + getAdapterType(adapter).toString(),
+                                        buttonMap[menuItem.itemId].toString()
+                                    )
+                                }
                             }
                             updateSortButtons(holder)
                         }
@@ -158,11 +161,13 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
                         if (!menuItem.isChecked) {
                             adapter.layoutType = layoutMap[menuItem.itemId]!!
                             menuItem.isChecked = true
-                            prefs.edit {
-                                putString(
-                                    "L" + getAdapterType(adapter).toString(),
-                                    layoutMap[menuItem.itemId].toString()
-                                )
+                            allowDiskAccessInStrictMode {
+                                prefs.edit {
+                                    putString(
+                                        "L" + getAdapterType(adapter).toString(),
+                                        layoutMap[menuItem.itemId].toString()
+                                    )
+                                }
                             }
                         }
                         true
@@ -178,11 +183,13 @@ open class BaseDecorAdapter<T : AdapterFragment.BaseInterface<*>>(
             val currentType = adapter.sortType.value
             val inverseType = Sorter.Type.inverse(currentType) ?: return@setOnClickListener
             adapter.sort(inverseType)
-            prefs.edit {
-                putString(
-                    "S" + getAdapterType(adapter).toString(),
-                    inverseType.toString()
-                )
+            allowDiskAccessInStrictMode {
+                prefs.edit {
+                    putString(
+                        "S" + getAdapterType(adapter).toString(),
+                        inverseType.toString()
+                    )
+                }
             }
             updateSortButtons(holder)
         }
